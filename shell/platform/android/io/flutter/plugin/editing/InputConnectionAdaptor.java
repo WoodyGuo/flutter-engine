@@ -5,6 +5,7 @@
 package io.flutter.plugin.editing;
 
 import android.content.Context;
+import android.provider.Settings;
 import android.text.DynamicLayout;
 import android.text.Editable;
 import android.text.Layout;
@@ -23,6 +24,9 @@ import io.flutter.plugin.common.ErrorLogResult;
 import io.flutter.plugin.common.MethodChannel;
 
 class InputConnectionAdaptor extends BaseInputConnection {
+    private final static String TAG = InputConnectionAdaptor.class.getSimpleName();
+    private final static boolean LOCAL_DEBUG = false;
+
     private final View mFlutterView;
     private final int mClient;
     private final TextInputChannel textInputChannel;
@@ -30,6 +34,7 @@ class InputConnectionAdaptor extends BaseInputConnection {
     private int mBatchCount;
     private InputMethodManager mImm;
     private final Layout mLayout;
+    private boolean mWorkaourndIssuesWithChineseImes = false;
 
     @SuppressWarnings("deprecation")
     public InputConnectionAdaptor(
@@ -48,6 +53,12 @@ class InputConnectionAdaptor extends BaseInputConnection {
         // shifting acts as if all text were in one line.
         mLayout = new DynamicLayout(mEditable, new TextPaint(), Integer.MAX_VALUE, Layout.Alignment.ALIGN_NORMAL, 1.0f, 0.0f, false);
         mImm = (InputMethodManager) view.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
+
+        // com.sohu.inputmethod.sogou/.SogouIME
+        String ime = Settings.Secure.getString(view.getContext().getContentResolver(),
+                Settings.Secure.DEFAULT_INPUT_METHOD);
+        Log.i(TAG, "Active input method: " + ime);
+        mWorkaourndIssuesWithChineseImes = ime.startsWith("com.sohu.inputmethod.sogou/") || true;
     }
 
     // Send the current state of the editable to Flutter.
@@ -61,9 +72,16 @@ class InputConnectionAdaptor extends BaseInputConnection {
         int composingStart = BaseInputConnection.getComposingSpanStart(mEditable);
         int composingEnd = BaseInputConnection.getComposingSpanEnd(mEditable);
 
-        mImm.updateSelection(mFlutterView,
-                             selectionStart, selectionEnd,
-                             composingStart, composingEnd);
+        if (LOCAL_DEBUG) {
+            Log.d(TAG, "Updating im selection:[" + selectionStart + ","
+                    + selectionEnd+ "], [" + composingStart + "," + composingEnd + "]");
+        }
+
+        if (!mWorkaourndIssuesWithChineseImes) {
+            mImm.updateSelection(mFlutterView,
+                                 selectionStart, selectionEnd,
+                                 composingStart, composingEnd);
+        }
 
         textInputChannel.updateEditingState(
             mClient,
@@ -82,20 +100,42 @@ class InputConnectionAdaptor extends BaseInputConnection {
 
     @Override
     public boolean beginBatchEdit() {
-        mBatchCount++;
-        return super.beginBatchEdit();
+        synchronized(this) {
+            if (mBatchCount >= 0) {
+                if (LOCAL_DEBUG) {
+                    Log.d(TAG, "Begin batch edit #" + mBatchCount);
+                }
+                mBatchCount++;
+                super.beginBatchEdit();
+                return true;
+
+            }
+        }
+        return false;
     }
 
     @Override
     public boolean endBatchEdit() {
-        boolean result = super.endBatchEdit();
-        mBatchCount--;
-        updateEditingState();
-        return result;
+        synchronized(this) {
+            if (mBatchCount > 0) {
+                super.endBatchEdit();
+                mBatchCount--;
+                if (LOCAL_DEBUG) {
+                    Log.d(TAG, "End batch edit #" + mBatchCount);
+                }
+                updateEditingState();
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
     public boolean commitText(CharSequence text, int newCursorPosition) {
+        if (LOCAL_DEBUG) {
+            Log.d(TAG, "Commit text: [" + text + "] at " + newCursorPosition);
+        }
+
         boolean result = super.commitText(text, newCursorPosition);
         updateEditingState();
         return result;
@@ -106,6 +146,10 @@ class InputConnectionAdaptor extends BaseInputConnection {
         if (Selection.getSelectionStart(mEditable) == -1)
             return true;
 
+        if (LOCAL_DEBUG) {
+            Log.d(TAG, "Delete surrounding text: " + beforeLength + "," + afterLength);
+        }
+
         boolean result = super.deleteSurroundingText(beforeLength, afterLength);
         updateEditingState();
         return result;
@@ -113,6 +157,10 @@ class InputConnectionAdaptor extends BaseInputConnection {
 
     @Override
     public boolean setComposingRegion(int start, int end) {
+        if (LOCAL_DEBUG) {
+            Log.d(TAG, "Composing region: " + start + "," + end);
+        }
+
         boolean result = super.setComposingRegion(start, end);
         updateEditingState();
         return result;
@@ -120,6 +168,10 @@ class InputConnectionAdaptor extends BaseInputConnection {
 
     @Override
     public boolean setComposingText(CharSequence text, int newCursorPosition) {
+        if (LOCAL_DEBUG) {
+            Log.d(TAG, "Composing text: [" + text + "] at " + newCursorPosition);
+        }
+
         boolean result;
         if (text.length() == 0) {
             result = super.commitText(text, newCursorPosition);
@@ -132,6 +184,10 @@ class InputConnectionAdaptor extends BaseInputConnection {
 
     @Override
     public boolean setSelection(int start, int end) {
+        if (LOCAL_DEBUG) {
+            Log.d(TAG, "Setting selection to " + start + "," + end);
+        }
+
         boolean result = super.setSelection(start, end);
         updateEditingState();
         return result;
