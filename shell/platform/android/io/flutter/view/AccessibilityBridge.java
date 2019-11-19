@@ -283,19 +283,24 @@ public class AccessibilityBridge extends AccessibilityNodeProvider {
     private final AccessibilityManager.AccessibilityStateChangeListener accessibilityStateChangeListener = new AccessibilityManager.AccessibilityStateChangeListener() {
         @Override
         public void onAccessibilityStateChanged(boolean accessibilityEnabled) {
-            if (accessibilityEnabled) {
-                accessibilityChannel.setAccessibilityMessageHandler(accessibilityMessageHandler);
-                accessibilityChannel.onAndroidAccessibilityEnabled();
-            } else {
-                accessibilityChannel.setAccessibilityMessageHandler(null);
-                accessibilityChannel.onAndroidAccessibilityDisabled();
-            }
+            try {
+                if (accessibilityEnabled) {
+                    accessibilityChannel.setAccessibilityMessageHandler(accessibilityMessageHandler);
+                    accessibilityChannel.onAndroidAccessibilityEnabled();
+                } else {
+                    accessibilityChannel.setAccessibilityMessageHandler(null);
+                    accessibilityChannel.onAndroidAccessibilityDisabled();
+                }
 
-            if (onAccessibilityChangeListener != null) {
-                onAccessibilityChangeListener.onAccessibilityChanged(
-                    accessibilityEnabled,
-                    accessibilityManager.isTouchExplorationEnabled()
-                );
+                if (onAccessibilityChangeListener != null) {
+                    onAccessibilityChangeListener.onAccessibilityChanged(
+                            accessibilityEnabled,
+                            accessibilityManager.isTouchExplorationEnabled()
+                            );
+                }
+            } catch (RuntimeException ignored) {
+                // java.lang.RuntimeException
+                // Cannot execute operation because FlutterJNI is not attached to native.
             }
         }
     };
