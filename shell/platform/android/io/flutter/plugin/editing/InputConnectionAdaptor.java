@@ -5,6 +5,8 @@
 package io.flutter.plugin.editing;
 
 import android.content.Context;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.provider.Settings;
 import android.text.DynamicLayout;
 import android.text.Editable;
@@ -55,10 +57,21 @@ class InputConnectionAdaptor extends BaseInputConnection {
         mImm = (InputMethodManager) view.getContext().getSystemService(Context.INPUT_METHOD_SERVICE);
 
         // com.sohu.inputmethod.sogou/.SogouIME
-        String ime = Settings.Secure.getString(view.getContext().getContentResolver(),
-                Settings.Secure.DEFAULT_INPUT_METHOD);
-        Log.i(TAG, "Active input method: " + ime);
-        mWorkaourndIssuesWithChineseImes = ime.startsWith("com.sohu.inputmethod.sogou/") || true;
+	Context context = view.getContext();
+        String ime = Settings.Secure.getString(
+            context.getContentResolver(), Settings.Secure.DEFAULT_INPUT_METHOD);
+	Log.i(TAG, "Active input method: " + ime);
+	if (ime.startsWith("com.sohu.inputmethod.sogou/")) {
+          try {
+            PackageManager pm = context.getPackageManager();
+            PackageInfo pi = pm.getPackageInfo("com.sohu.inputmethod.sogou", 0);
+            Log.i(TAG, "\tVersion: " + pi.versionCode);
+	    // 10.0: 1110
+	    // 10.1: 1130
+            mWorkaourndIssuesWithChineseImes = pi.versionCode < 1130;
+          } catch (Throwable ignored) {
+          }
+	}
     }
 
     // Send the current state of the editable to Flutter.
